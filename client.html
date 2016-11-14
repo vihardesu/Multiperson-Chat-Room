@@ -66,9 +66,7 @@
          else if(from_user == user){
             $('#chatlog').append('<b>DM to: '+target+':</b> '+message+'<br>');
          }
-         else{
-
-         }
+         else{}
       });
 
       //updates users
@@ -98,16 +96,11 @@
          }
       });
 
-      socketio.on('updateBans', function(newBans){
-         bans = newBans;
-         console.log(bans);
-      });
 
       //when rooms updated, get and display
       socketio.on('updateRooms', function(rooms, curroom){
          room = curroom;
          room_creator = rooms[room];
-         console.log('room created by: '+room_creator);
          $("#rooms").empty();
          $("#rooms").append("<div id='roomsHead'><b>Current Room: </b></div>");
          $.each(rooms, function(key, value){
@@ -141,11 +134,16 @@
       });
 
       socketio.on('banning', function(target_user, given_room){
-         if(user == target_user && room == given_room){
-            console.log("banning "+user);
-            socketio.emit('ban', user, room);
+         console.log("debug: target: "+target_user);
+         console.log("current room: "+room+" and given room: "+given_room);
+         if(user == target_user){
+
+            bans.push(given_room);
+            socketio.emit('complete_ban', user);
+            console.log(bans);
          }
       });
+
 
       socketio.on('allPasswords', function(all_passwords){
          passwords = all_passwords;
@@ -184,7 +182,7 @@
 
          banbtn.onclick = function(){
             if(user == room_creator){
-               socketio.emit("ban_setup", target_user, room);
+               socketio.emit('ban_setup', target_user, room);
             }
          }
       }
@@ -192,14 +190,21 @@
       function createRoom(){
          var p = prompt("Room password (leave blank for no password");
          var r = document.getElementById("newRoom").value;
-         
-            socketio.emit("create_room", r, user, p);
-      }
+         socketio.emit("create_room", r, user, p);
 
+      }
       function switchRoom(sroom){
-         if(passwords[sroom] == ''){
+         var canSwitch = true;
+         for(var i=0; i<bans.length; i++){
+            if(bans[i] == sroom){
+               canSwitch = false;
+               alert("you were banned from this room!");
+            }
+         }
+         if(canSwitch === true){
+         if(passwords[sroom] == '' || sroom == 'default'){
             room = sroom;
-            socketio.emit('switchRoom', room, user);  
+            socketio.emit('switchRoom', room, user);
          }
          else{
             var p = prompt("Room Password");
@@ -207,6 +212,7 @@
                room = sroom;
                socketio.emit('switchRoom', room, user);
             }
+         }
          }
          
       }
