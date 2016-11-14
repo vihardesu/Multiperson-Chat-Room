@@ -43,6 +43,7 @@ io.sockets.on("connection", function(socket){
 		}
 		if(redo == false){
 			//otherwise add user and commit appropriate messages
+			//got this part from http://psitsmike.com/2011/10/node-js-and-socket-io-multiroom-chat-tutorial/
 		socket.username = username;
 		socket.room = 'default';
 		users[username] = 'default';
