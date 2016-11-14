@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html>
    <head>
-   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
       <script src="/socket.io/socket.io.js"></script>
-      
+      <!--<link href="/public/style.css" rel="stylesheet" type='text/css'>-->
+      <title>ChatRoom</title>
    </head>
    <body>
       <div id='displayUser'></div>
@@ -11,9 +12,9 @@
       <div id='AllUsers'></div>
       <div id='RoomUsers'></div>
       
-
+      Create a room:
       <input type="text" id="newRoom">
-      <button onclick="createRoom()">create room</button>
+      <button onclick="createRoom()">create room</button><br>
       
       <!--from http://www.w3schools.com/howto/howto_css_modals.asp -->
       <div id="userModal" class="modal" style="display: none; position: fixed; z-index: 1; background-color: rgba(0,0,0,.5); width: 80%">
@@ -22,13 +23,15 @@
             <input type="text" id="dmtext">
             <button id='dm'>Message</button>
             <button id='kick'>Kick</button>
-            <button id='ban'>Ban from Room</button>
+            <button id='ban'>Ban from Room</button><br>
+            <button id='transfer'>Transfer Ownership</button>
          </div>
       </div>
-
+      Send Message:
       <input type="text" id="message_input"/>
       <button onclick="sendMessage()">send</button>
       <div id="chatlog"></div>
+      <div id="typetrack"></div>
    
 
    <script type ="text/javascript">
@@ -42,15 +45,19 @@
       //adds user with prompt
       socketio.on('connect', function(){
          user = prompt("who are you?");
+         if(user === null){
+            alert("must input a name");
+            user = prompt("who are you?");
+         }
          socketio.emit('adduser', user);
       });
+      //if user tries to cheat or create a duplicate
+      socketio.on('redoUser',function(){
+         alert("User already here, pick a new name");
+         user = prompt("who are you?");
+         socketio.emit('adduser', user);
+      })
 
-
-      //message received, now display
-      // socketio.on("message_to_client", function(data) {
-      //    document.getElementById("chatlog").appendChild(document.createElement("hr"));
-      //    document.getElementById("chatlog").appendChild(document.createTextNode(data['message']));
-      // });
 
 
 
@@ -59,6 +66,7 @@
          $('#chatlog').append('<b>'+username+':</b> '+data+'<br>');
       });
 
+      //show personal messages in recipient and sender chats
       socketio.on("dm_client", function(target, from_user, message){
          if(target == user){
             $('#chatlog').append('<b>DM from: '+from_user+':</b> '+message+'<br>');
@@ -73,9 +81,9 @@
       socketio.on('updateUsers', function(users, curuser){
          document.getElementById("AllUsers").innerHTML = '';
          document.getElementById("displayUser").innerHTML = "Hello, "+curuser;
-
+         //shows all online users and just users in your room
          for(value in users){
-            $("#AllUsers").html("<span>All Active Users: </span>");
+            $("#AllUsers").html("<span>All Online Users: </span>");
             $("#RoomUsers").html("<span>Users in Room: </span>");
             $.each(users, function(key){
                if(key == user){
@@ -113,7 +121,7 @@
          });
       });
 
-
+      //to create a room
       socketio.on('createdroom', function(rooms){
          $("#rooms").empty();
          $("#rooms").append("<div id='roomsHead'><b>Current Room: </b></div>");
@@ -127,12 +135,14 @@
          });
       });
 
+      //bounce back here to kick target client
       socketio.on('kicking', function(target_user){
          if(user == target_user){
             socketio.emit('kick', user);
          }
       });
 
+      //bounce back here to ban target client
       socketio.on('banning', function(target_user, given_room){
          console.log("debug: target: "+target_user);
          console.log("current room: "+room+" and given room: "+given_room);
@@ -144,16 +154,18 @@
          }
       });
 
-
+      //receive passwords -- fixes bugs for users created after rooms
       socketio.on('allPasswords', function(all_passwords){
          passwords = all_passwords;
       });
 
+      //cluttered chat is annoying
       socketio.on('clearChat', function(new_room){
          $('#chatlog').empty();
          $('#chatlog').append('<b>Now in '+new_room+'</b><br>');
       });
 
+      //modal popups ~funkay~
       function openModal(target_user){
          var modal = document.getElementById("userModal");
          modal.style.display = "block";
@@ -164,10 +176,12 @@
                modal.style.display = "none";
             }
          }
-
+         //also received from w3schools
          var dmbtn = document.getElementById("dm");
          var kickbtn = document.getElementById("kick");
          var banbtn = document.getElementById("ban");
+         var transferbtn = document.getElementById("transfer");
+
 
          dmbtn.onclick = function(){
             var msg = document.getElementById("dmtext").value;
@@ -185,14 +199,23 @@
                socketio.emit('ban_setup', target_user, room);
             }
          }
+
+         transferbtn.onclick = function(){
+            if(user == room_creator){
+               socketio.emit('transfer_admin', target_user, user);
+            }
+         }
       }
       
+      //create on click
       function createRoom(){
          var p = prompt("Room password (leave blank for no password");
          var r = document.getElementById("newRoom").value;
          socketio.emit("create_room", r, user, p);
 
       }
+
+      //switch on button click
       function switchRoom(sroom){
          var canSwitch = true;
          for(var i=0; i<bans.length; i++){
@@ -216,12 +239,36 @@
          }
          
       }
-
+      //send chat on button click
       function sendMessage(){
          var msg = document.getElementById("message_input").value;
-         socketio.emit("message_to_server", {message:msg});
+         socketio.emit("message_to_server", msg);
          document.getElementById("message_input").value = "";
       }
+
+
+      //alerts other users when one is typing, slight delay to make visible
+      $(document).ready(function(){
+         $("#message_input").keydown(function(){
+            socketio.emit('key_down', user);
+         });
+         $("#message_input").keyup(function(){
+
+            socketio.emit('key_off', user);
+         });  
+      });
+      
+      //displays '...is typing'
+      socketio.on('isTyping', function(typing_user){
+         console.log("Key is up");
+         $('#typetrack').html('<div id="typing"><b>..'+typing_user+' is typing..</b></div>');
+      });
+      socketio.on('stopTyping', function(){
+         console.log("key is down");
+         setTimeout(function(){$("#typing").empty();}, 800);
+      });
+
+
       </script>
 </body>
 </html>
